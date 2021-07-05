@@ -24,7 +24,11 @@ if __name__ == '__main__':
             os.makedirs(dir2save)
         except OSError:
             pass
+
+        # real shape: [batch, channel, w, h]
+        #          -> [1, 3, w, h]
         real = functions.read_image(opt)
+
         functions.adjust_scales2image(real, opt)
         train(opt, Gs, Zs, reals, NoiseAmp)
         SinGAN_generate(Gs,Zs,reals,NoiseAmp,opt)
