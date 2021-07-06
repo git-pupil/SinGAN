@@ -233,6 +233,8 @@ def calculate_sifid_given_paths(path1, path2, batch_size, cuda, dims, suffix):
 
     path2 = pathlib.Path(path2)
     files2 = list(path2.glob('*.%s' %suffix))
+    print(path1)
+    print(files1)
 
     fid_values = []
     Im_ind = []

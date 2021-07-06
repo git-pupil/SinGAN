@@ -17,14 +17,17 @@ from sklearn.cluster import KMeans
 
 # custom weights initialization called on netG and netD
 
+# 将数据压缩至[0,1]区间
 def denorm(x):
     out = (x + 1) / 2
     return out.clamp(0, 1)
 
+# 将数据压缩至[-1,1]区间
 def norm(x):
     out = (x -0.5) *2
     return out.clamp(-1, 1)
 
+# torch张量转化为ndarray数组并压缩至[0,1]区间，且对图像形状有（1,d,h,w)-->(h,w,d)
 def convert_image_np(inp):
     if inp.shape[1]==3:
         inp = denorm(inp)
@@ -40,6 +43,7 @@ def convert_image_np(inp):
     inp = np.clip(inp,0,1)
     return inp
 
+# 保存图片
 def save_image(real_cpu,receptive_feild,ncs,epoch_num,file_name):
     fig,ax = plt.subplots(1)
     if ncs==1:
@@ -58,14 +62,18 @@ def convert_image_np_2d(inp):
     inp = inp.numpy()
     return inp
 
+# 生成噪声
 def generate_noise(size,num_samp=1,device='cuda',type='gaussian', scale=1):
+    # 高斯噪声
     if type == 'gaussian':
         noise = torch.randn(num_samp, size[0], round(size[1]/scale), round(size[2]/scale), device=device)
         noise = upsampling(noise,size[1], size[2])
+    # 高斯混合噪声
     if type =='gaussian_mixture':
         noise1 = torch.randn(num_samp, size[0], size[1], size[2], device=device)+5
         noise2 = torch.randn(num_samp, size[0], size[1], size[2], device=device)
         noise = noise1+noise2
+    # 均匀噪声
     if type == 'uniform':
         noise = torch.randn(num_samp, size[0], size[1], size[2], device=device)
     return noise
@@ -130,6 +138,8 @@ def calc_gradient_penalty(netD, real_data, fake_data, LAMBDA, device):
     gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * LAMBDA
     return gradient_penalty
 
+# 加载训练图片，尺寸为（1,d,h,w)
+# 之前上方有个同名函数，将之删除，以此处的函数为准
 def read_image(opt):
     x = img.imread('%s/%s' % (opt.input_dir,opt.input_name))
     x = np2torch(x,opt)
@@ -177,13 +187,23 @@ def save_networks(netG,netD,z,opt):
     torch.save(z, '%s/z_opt.pth' % (opt.outf))
 
 def adjust_scales2image(real_,opt):
+    # 层与层之间的缩放因子为scale_factor_init时，图像最小边从min_size到真实大小需要的总层数
+    opt.num_scales = math.ceil((math.log(math.pow(opt.min_size / (min(real_.shape[2], real_.shape[3])), 1), opt.scale_factor_init))) + 1
 
-    opt.num_scales = int(math.log(math.pow(opt.min_size / (min(real_.shape[2], real_.shape[3])), 1), opt.scale_factor_init)) + 1
-    scale2stop = int(math.log(min([opt.max_size, max([real_.shape[2], real_.shape[3]])]) / max([real_.shape[2], real_.shape[3]]),opt.scale_factor_init))
+    # 控制最清晰的层的输出最长的边不超过max_size像素
+    # 本质上计算的是图像以scale_factor_init为层与层之间的缩放因子时长边变换为max_size所需的层数
+    scale2stop = math.ceil(math.log(min([opt.max_size, max([real_.shape[2], real_.shape[3]])]) / max([real_.shape[2], real_.shape[3]]),opt.scale_factor_init))
+
+    # 二者相减得到的是图像从最低尺度短边min_size像素（即最粗糙的层）到最长边max_size像素（规定的最大输出）所需的层数
     opt.stop_scale = opt.num_scales - scale2stop
+
+    # real金字塔最高层缩放
+    # 当图像最长边小于max_size时缩放因子为 1，其他情况将长边缩放为max_size
     opt.scale1 = min(opt.max_size / max([real_.shape[2], real_.shape[3]]),1)  # min(250/max([real_.shape[0],real_.shape[1]]),1)
     real = imresize(real_, opt.scale1, opt)
 
+    # 根据金字塔总层数调整层与层之间的缩放指数和输出层位置
+    # 与初始缩放因子的差异是新的缩放因子满足网络最大输出约束
     opt.scale_factor = math.pow(opt.min_size/(min(real.shape[2],real.shape[3])),1/(opt.stop_scale))
     scale2stop = int(math.log(min([opt.max_size, max([real_.shape[2], real_.shape[3]])]) / max([real_.shape[2], real_.shape[3]]),opt.scale_factor_init))
     opt.stop_scale = opt.num_scales - scale2stop
