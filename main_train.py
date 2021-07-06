@@ -5,17 +5,17 @@ import SinGAN.functions as functions
 
 
 if __name__ == '__main__':
-    parser = get_arguments()
+    parser = get_arguments()  # 导入基础参数配置
     parser.add_argument('--input_dir', help='input image dir', default='Input/Images')
     parser.add_argument('--input_name', help='input image name', required=True)
-    parser.add_argument('--mode', help='task to be done', default='train')
+    parser.add_argument('--mode', help='task to be done', default='train')  # 导入额外参数配置
     opt = parser.parse_args()
     opt = functions.post_config(opt)
-    Gs = []
-    Zs = []
-    reals = []
-    NoiseAmp = []
-    dir2save = functions.generate_dir2save(opt)
+    Gs = []  # 生成器列表
+    Zs = []  # 噪声列表
+    reals = []  # 每一层的真实图像（大小各不相同），用于进行模型训练的损失计算
+    NoiseAmp = []  # ？？
+    dir2save = functions.generate_dir2save(opt)  # 获取存储图像的路径
 
     if (os.path.exists(dir2save)):
         print('trained model already exist')
@@ -27,8 +27,7 @@ if __name__ == '__main__':
 
         # real shape: [batch, channel, w, h]
         #          -> [1, 3, w, h]
-        real = functions.read_image(opt)
-
-        functions.adjust_scales2image(real, opt)
-        train(opt, Gs, Zs, reals, NoiseAmp)
-        SinGAN_generate(Gs,Zs,reals,NoiseAmp,opt)
+        real = functions.read_image(opt)  # 以tensor格式读取输入图像
+        functions.adjust_scales2image(real, opt)  # 按照输入图片的尺寸获取网络层数(scales)
+        train(opt, Gs, Zs, reals, NoiseAmp)  # 开始训练
+        SinGAN_generate(Gs, Zs, reals, NoiseAmp, opt)  # 用训练好的模型进行图像生成
