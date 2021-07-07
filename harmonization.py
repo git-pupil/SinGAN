@@ -9,10 +9,13 @@ import SinGAN.functions as functions
 if __name__ == '__main__':
     # 输入参数
     parser = get_arguments()
+    # 训练图像
     parser.add_argument('--input_dir', help='input image dir', default='Input/Images')
     parser.add_argument('--input_name', help='training image name', required=True)
+    # 输入图像（需要协调的图像）
     parser.add_argument('--ref_dir', help='input reference dir', default='Input/Harmonization')
     parser.add_argument('--ref_name', help='reference image name', required=True)
+    # 开始融合的层数
     parser.add_argument('--harmonization_start_scale', help='harmonization injection scale', type=int, required=True)
     parser.add_argument('--mode', help='task to be done', default='harmonization')
     opt = parser.parse_args()
@@ -45,7 +48,7 @@ if __name__ == '__main__':
             ref = functions.read_image_dir('%s/%s' % (opt.ref_dir, opt.ref_name), opt)
             # 加载掩模图片
             mask = functions.read_image_dir('%s/%s_mask%s' % (opt.ref_dir,opt.ref_name[:-4],opt.ref_name[-4:]), opt)
-            #
+            # 调整输入/掩模图像和训练图像的尺寸相同（最高层尺寸）
             if ref.shape[3] != real.shape[3]:
                 mask = imresize_to_shape(mask, [real.shape[2], real.shape[3]], opt)
                 mask = mask[:, :, :real.shape[2], :real.shape[3]]
@@ -56,7 +59,7 @@ if __name__ == '__main__':
 
             N = len(reals) - 1 # 金字塔层数序标
             n = opt.harmonization_start_scale # 开始加入融合图片的层数
-            #
+            # 调整输入图像尺寸与injection scale层一致
             in_s = imresize(ref, pow(opt.scale_factor, (N - n + 1)), opt)
             in_s = in_s[:, :, :reals[n - 1].shape[2], :reals[n - 1].shape[3]]
             in_s = imresize(in_s, 1 / opt.scale_factor, opt)
