@@ -17,6 +17,7 @@ if __name__ == '__main__':
     parser.add_argument('--ref_name', help='reference image name', required=True)
     # 开始融合的层数
     parser.add_argument('--harmonization_start_scale', help='harmonization injection scale', type=int, required=True)
+
     parser.add_argument('--mode', help='task to be done', default='harmonization')
     opt = parser.parse_args()
     opt = functions.post_config(opt) # 初始化固定的参数
