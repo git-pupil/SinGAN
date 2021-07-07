@@ -7,6 +7,12 @@ import SinGAN.functions as functions
 
 # 真实图像的绘制转换应用在目标真实图像的预训练模型基础上进行
 # 将预训练模型的第n层将生成器的输入图像更改为对应尺寸的手绘风格图进行生成
+# 参数意义：
+#     input_name: 需要绘制的图像，这里要求已有该图像的预训练模型
+#     ref_name  : 最终目标绘制结果
+#     paint_start_scale: 开始绘制的层数，在该层之前的模型不会被调用，后续也称为注入层（Injection Layer)
+#     quantization_flag: 该值默认为0(False)， 其值为1(True)时需要对图像进行来量化操作
+
 if __name__ == '__main__':
     parser = get_arguments()
     parser.add_argument('--input_dir', help='input image dir', default='Input/Images')
@@ -41,7 +47,7 @@ if __name__ == '__main__':
         # 加载预训练模型
         Gs, Zs, reals, NoiseAmp = functions.load_trained_pyramid(opt)
 
-        # 判断参考图像注入层
+        # 判断参考图像注入层，即开始生成的层
         if (opt.paint_start_scale < 1) | (opt.paint_start_scale > (len(Gs)-1)):
             print("injection scale should be between 1 and %d" % (len(Gs)-1))
         else:

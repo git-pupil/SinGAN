@@ -7,8 +7,6 @@ import scipy.io as sio
 import math
 from skimage import io as img
 from skimage import color, morphology, filters
-#from skimage import morphology
-#from skimage import filters
 from SinGAN.imresize import imresize
 import os
 import random
@@ -16,6 +14,7 @@ from sklearn.cluster import KMeans
 
 
 # custom weights initialization called on netG and netD
+# 模型网络的权重初始化时将网络分为生成网路（netG）和判别网络（netD）分别进行初始化
 
 # 将数据压缩至[0,1]区间
 def denorm(x):
@@ -37,8 +36,6 @@ def convert_image_np(inp):
         inp = denorm(inp)
         inp = move_to_cpu(inp[-1,-1,:,:])
         inp = inp.numpy().transpose((0,1))
-        # mean = np.array([x/255.0 for x in [125.3,123.0,113.9]])
-        # std = np.array([x/255.0 for x in [63.0,62.1,66.7]])
 
     inp = np.clip(inp,0,1)
     return inp
@@ -49,7 +46,6 @@ def save_image(real_cpu,receptive_feild,ncs,epoch_num,file_name):
     if ncs==1:
         ax.imshow(real_cpu.view(real_cpu.size(2),real_cpu.size(3)),cmap='gray')
     else:
-        #ax.imshow(convert_image_np(real_cpu[0,:,:,:].cpu()))
         ax.imshow(convert_image_np(real_cpu.cpu()))
     rect = patches.Rectangle((0,0),receptive_feild,receptive_feild,linewidth=5,edgecolor='r',facecolor='none')
     ax.add_patch(rect)
@@ -57,12 +53,7 @@ def save_image(real_cpu,receptive_feild,ncs,epoch_num,file_name):
     plt.savefig(file_name)
     plt.close(fig)
 
-def convert_image_np_2d(inp):
-    inp = denorm(inp)
-    inp = inp.numpy()
-    return inp
-
-# 生成与当前尺度图像大小相同的噪声
+# 生成与当前尺度图像大小相同的噪声图，该生成结果在与上一层输出上采样结果相加后将作为每层的输入
 def generate_noise(size,num_samp=1,device='cuda',type='gaussian', scale=1):
     # 高斯噪声
     if type == 'gaussian':
@@ -83,8 +74,6 @@ def plot_learning_curves(G_loss,D_loss,epochs,label1,label2,name):
     fig,ax = plt.subplots(1)
     n = np.arange(0,epochs)
     plt.plot(n,G_loss,n,D_loss)
-    #plt.title('loss')
-    #plt.ylabel('loss')
     plt.xlabel('epochs')
     plt.legend([label1,label2],loc='upper right')
     plt.savefig('%s.png' % name)
@@ -122,7 +111,6 @@ def move_to_cpu(t):
     return t
 
 def calc_gradient_penalty(netD, real_data, fake_data, LAMBDA, device):
-    #print real_data.size()
     alpha = torch.rand(1, 1)
     alpha = alpha.expand(real_data.size())
     alpha = alpha.to(device)#cuda() #gpu) #if use_cuda else alpha
@@ -168,7 +156,6 @@ def np2torch(x,opt):
     if not(opt.not_cuda):
         x = move_to_gpu(x)
     x = x.type(torch.cuda.FloatTensor) if not(opt.not_cuda) else x.type(torch.FloatTensor)
-    #x = x.type(torch.FloatTensor)
     x = norm(x)
     return x
 
@@ -185,11 +172,14 @@ def read_image2np(opt):
     x = x[:, :, 0:3]
     return x
 
+# 保存模型参数
 def save_networks(netG,netD,z,opt):
     torch.save(netG.state_dict(), '%s/netG.pth' % (opt.outf))
     torch.save(netD.state_dict(), '%s/netD.pth' % (opt.outf))
     torch.save(z, '%s/z_opt.pth' % (opt.outf))
 
+# 根据模型设定调整图像缩放因子并计算网络所需层数
+# 模型设定：最底层（最低尺度，或最模糊的层）输入图像的最短边不小于opt.min_size，且最高层输出的长度不大于opt.max_size，这两个参数可以在config.py文件中进行修改
 def adjust_scales2image(real_,opt):
     # 层与层之间的缩放因子为scale_factor_init时，图像最小边从min_size到真实大小需要的总层数
     opt.num_scales = math.ceil((math.log(math.pow(opt.min_size / (min(real_.shape[2], real_.shape[3])), 1), opt.scale_factor_init))) + 1
@@ -210,19 +200,6 @@ def adjust_scales2image(real_,opt):
     # 与初始缩放因子的差异是新的缩放因子满足网络最大输出约束
     opt.scale_factor = math.pow(opt.min_size/(min(real.shape[2],real.shape[3])),1/(opt.stop_scale))
     scale2stop = int(math.log(min([opt.max_size, max([real_.shape[2], real_.shape[3]])]) / max([real_.shape[2], real_.shape[3]]),opt.scale_factor_init))
-    opt.stop_scale = opt.num_scales - scale2stop
-    return real
-
-def adjust_scales2image_SR(real_,opt):
-    opt.min_size = 18
-    opt.num_scales = int((math.log(opt.min_size / min(real_.shape[2], real_.shape[3]), opt.scale_factor_init))) + 1
-    scale2stop = int(math.log(min(opt.max_size , max(real_.shape[2], real_.shape[3])) / max(real_.shape[0], real_.shape[3]), opt.scale_factor_init))
-    opt.stop_scale = opt.num_scales - scale2stop
-    opt.scale1 = min(opt.max_size / max([real_.shape[2], real_.shape[3]]), 1)  # min(250/max([real_.shape[0],real_.shape[1]]),1)
-    real = imresize(real_, opt.scale1, opt)
-    #opt.scale_factor = math.pow(opt.min_size / (real.shape[2]), 1 / (opt.stop_scale))
-    opt.scale_factor = math.pow(opt.min_size/(min(real.shape[2],real.shape[3])),1/(opt.stop_scale))
-    scale2stop = int(math.log(min(opt.max_size, max(real_.shape[2], real_.shape[3])) / max(real_.shape[0], real_.shape[3]), opt.scale_factor_init))
     opt.stop_scale = opt.num_scales - scale2stop
     return real
 
@@ -247,6 +224,7 @@ def load_trained_pyramid(opt, mode_='train'):
     if (mode == 'animation_train') | (mode == 'SR_train') | (mode == 'paint_train'):
         opt.mode = mode
     dir = generate_dir2save(opt)
+
     if(os.path.exists(dir)):
         Gs = torch.load('%s/Gs.pth' % dir)
         Zs = torch.load('%s/Zs.pth' % dir)
@@ -261,13 +239,17 @@ def load_trained_pyramid(opt, mode_='train'):
 def generate_in2coarsest(reals,scale_v,scale_h,opt):
     real = reals[opt.gen_start_scale]
     real_down = upsampling(real, scale_v * real.shape[2], scale_h * real.shape[3])
+    
+    # 当初始生成尺度为0时，输入为全0
     if opt.gen_start_scale == 0:
         in_s = torch.full(real_down.shape, 0, device=opt.device)
-    else: #if n!=0
+    else: 
         in_s = upsampling(real_down, real_down.shape[2], real_down.shape[3])
     return in_s
 
 # 生成保存生成图像的文件夹路径
+# 模型训练输出位置格式为：TrainedModels/{Image_name}/scale_factor,alpha/{}
+# 格式为：Output/{Application_name}/{Image_name}/{}.png
 def generate_dir2save(opt):
     dir2save = None
     if (opt.mode == 'train') | (opt.mode == 'SR_train'):
