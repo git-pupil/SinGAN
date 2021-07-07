@@ -62,7 +62,7 @@ def convert_image_np_2d(inp):
     inp = inp.numpy()
     return inp
 
-# 生成噪声
+# 生成与当前尺度图像大小相同的噪声
 def generate_noise(size,num_samp=1,device='cuda',type='gaussian', scale=1):
     # 高斯噪声
     if type == 'gaussian':
@@ -78,6 +78,7 @@ def generate_noise(size,num_samp=1,device='cuda',type='gaussian', scale=1):
         noise = torch.randn(num_samp, size[0], size[1], size[2], device=device)
     return noise
 
+# 分别绘制生成损失和重构损失
 def plot_learning_curves(G_loss,D_loss,epochs,label1,label2,name):
     fig,ax = plt.subplots(1)
     n = np.arange(0,epochs)
@@ -89,6 +90,7 @@ def plot_learning_curves(G_loss,D_loss,epochs,label1,label2,name):
     plt.savefig('%s.png' % name)
     plt.close(fig)
 
+# 绘制损失函数（生成损失+重构损失）
 def plot_learning_curve(loss,epochs,name):
     fig,ax = plt.subplots(1)
     n = np.arange(0,epochs)
@@ -98,10 +100,13 @@ def plot_learning_curve(loss,epochs,name):
     plt.savefig('%s.png' % name)
     plt.close(fig)
 
+# 上采样函数，采用双线性插值法进行插值
 def upsampling(im,sx,sy):
     m = nn.Upsample(size=[round(sx),round(sy)],mode='bilinear',align_corners=True)
     return m(im)
 
+# 规定网络参数是否需要保留梯度值
+# 实际调用中在训练结束验证开始前将所有参数的require_grad设为False，即验证无需更新网络参数，减少数据量
 def reset_grads(model,require_grad):
     for p in model.parameters():
         p.requires_grad_(require_grad)
@@ -222,8 +227,14 @@ def adjust_scales2image_SR(real_,opt):
     opt.stop_scale = opt.num_scales - scale2stop
     return real
 
+# 根据新的尺度缩放因子生成图像金字塔，即每个层次GAN的输入大小
 def creat_reals_pyramid(real,reals,opt):
+    
+    # 如果输入图像是PNG格式，则取前三个通道
     real = real[:,0:3,:,:]
+
+    # 计算每层的输入图像的尺寸，第i层的尺寸=缩放因子^(stop-i)，可以将每层的尺寸为等比数列
+    # -i的含义：原先最清晰的层的标号为1，-i后最粗糙的粗糙的层标号为i，直观上更符合人的阅读习惯
     for i in range(0,opt.stop_scale+1,1):
         scale = math.pow(opt.scale_factor,opt.stop_scale-i)
         curr_real = imresize(real,scale,opt)
@@ -257,6 +268,7 @@ def generate_in2coarsest(reals,scale_v,scale_h,opt):
         in_s = upsampling(real_down, real_down.shape[2], real_down.shape[3])
     return in_s
 
+# 生成保存生成图像的文件夹路径
 def generate_dir2save(opt):
     dir2save = None
     if (opt.mode == 'train') | (opt.mode == 'SR_train'):
