@@ -144,7 +144,6 @@ def calc_gradient_penalty(netD, real_data, fake_data, LAMBDA, device):
     return gradient_penalty
 
 # 加载训练图片，尺寸为（1,d,h,w)
-# 之前上方有个同名函数，将之删除，以此处的函数为准
 def read_image(opt):
     x = img.imread('%s/%s' % (opt.input_dir,opt.input_name))
     x = np2torch(x,opt)
@@ -241,9 +240,8 @@ def creat_reals_pyramid(real,reals,opt):
         reals.append(curr_real)
     return reals
 
-
+# 加载已训练的金字塔模型，应用时调用
 def load_trained_pyramid(opt, mode_='train'):
-    #dir = 'TrainedModels/%s/scale_factor=%f' % (opt.input_name[:-4], opt.scale_factor_init)
     mode = opt.mode
     opt.mode = 'train'
     if (mode == 'animation_train') | (mode == 'SR_train') | (mode == 'paint_train'):
@@ -322,6 +320,7 @@ def calc_init_scale(opt):
     in_scale = pow(opt.sr_factor, 1 / iter_num)
     return in_scale,iter_num
 
+# 使用kmeans聚类对图像中出现的颜色进行聚类，使用聚类图像对图像进行量化
 def quant(prev,device):
     arr = prev.reshape((-1, 3)).cpu()
     kmeans = KMeans(n_clusters=5, random_state=0).fit(arr)
@@ -331,20 +330,22 @@ def quant(prev,device):
     x = torch.from_numpy(x)
     x = move_to_gpu(x)
     x = x.type(torch.cuda.FloatTensor) if () else x.type(torch.FloatTensor)
-    #x = x.type(torch.FloatTensor.to(device))
     x = x.view(prev.shape)
+
+    # 返回量化图像和聚类中心
     return x,centers
 
+# 使用与真实图像相同的聚类中心对参考图像进行量化
 def quant2centers(paint, centers):
     arr = paint.reshape((-1, 3)).cpu()
     kmeans = KMeans(n_clusters=5, init=centers, n_init=1).fit(arr)
     labels = kmeans.labels_
-    #centers = kmeans.cluster_centers_
+
     x = centers[labels]
     x = torch.from_numpy(x)
     x = move_to_gpu(x)
     x = x.type(torch.cuda.FloatTensor) if torch.cuda.is_available() else x.type(torch.FloatTensor)
-    #x = x.type(torch.cuda.FloatTensor)
+
     x = x.view(paint.shape)
     return x
 
