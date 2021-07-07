@@ -9,19 +9,20 @@ import matplotlib.pyplot as plt
 from SinGAN.imresize import imresize
 
 def train(opt,Gs,Zs,reals,NoiseAmp):
-    real_ = functions.read_image(opt)
-    in_s = 0
-    scale_num = 0
-    real = imresize(real_,opt.scale1,opt)
-    reals = functions.creat_reals_pyramid(real,reals,opt)
-    nfc_prev = 0
+    """进行训练"""
+    real_ = functions.read_image(opt)  # 获取torch格式的输入图像
+    in_s = 0  # 上层输入的上采样记录
+    scale_num = 0  # 网络层数
+    real = imresize(real_, opt.scale1, opt)  # 根据输入层数改变输入图像形状（当前是最低层，初始图片最粗糙）
+    reals = functions.creat_reals_pyramid(real, reals, opt)  # 产生每一层的输入图像
+    nfc_prev = 0  # 上一次训练的nfc值
 
-    while scale_num<opt.stop_scale+1:
-        opt.nfc = min(opt.nfc_init * pow(2, math.floor(scale_num / 4)), 128)
-        opt.min_nfc = min(opt.min_nfc_init * pow(2, math.floor(scale_num / 4)), 128)
+    while scale_num<opt.stop_scale+1:  # 逐层进行网络训练
+        opt.nfc = min(opt.nfc_init * pow(2, math.floor(scale_num / 4)), 128)  # ？？
+        opt.min_nfc = min(opt.min_nfc_init * pow(2, math.floor(scale_num / 4)), 128)  # ？？
 
-        opt.out_ = functions.generate_dir2save(opt)
-        opt.outf = '%s/%d' % (opt.out_,scale_num)
+        opt.out_ = functions.generate_dir2save(opt) # 获取生成模型的存储路径
+        opt.outf = '%s/%d' % (opt.out_,scale_num)  # 获取生成模型的层数据的存储路径
         try:
             os.makedirs(opt.outf)
         except OSError:
@@ -30,55 +31,56 @@ def train(opt,Gs,Zs,reals,NoiseAmp):
         #plt.imsave('%s/in.png' %  (opt.out_), functions.convert_image_np(real), vmin=0, vmax=1)
         #plt.imsave('%s/original.png' %  (opt.out_), functions.convert_image_np(real_), vmin=0, vmax=1)
         plt.imsave('%s/real_scale.png' %  (opt.outf), functions.convert_image_np(reals[scale_num]), vmin=0, vmax=1)
-
-        D_curr,G_curr = init_models(opt)
-        if (nfc_prev==opt.nfc):
+        #  把当前层的真实图片存起来
+        D_curr,G_curr = init_models(opt)  # 初始化生成器和判别器模块
+        if (nfc_prev==opt.nfc):  # ？？？
             G_curr.load_state_dict(torch.load('%s/%d/netG.pth' % (opt.out_,scale_num-1)))
             D_curr.load_state_dict(torch.load('%s/%d/netD.pth' % (opt.out_,scale_num-1)))
 
-        z_curr,in_s,G_curr = train_single_scale(D_curr,G_curr,reals,Gs,Zs,in_s,NoiseAmp,opt)
-
+        z_curr,in_s,G_curr = train_single_scale(D_curr,G_curr,reals,Gs,Zs,in_s,NoiseAmp,opt)  # 对本层进行训练，返回
+                                                                                                # 噪声图、上采样及生成器
         G_curr = functions.reset_grads(G_curr,False)
         G_curr.eval()
         D_curr = functions.reset_grads(D_curr,False)
         D_curr.eval()
 
-        Gs.append(G_curr)
-        Zs.append(z_curr)
-        NoiseAmp.append(opt.noise_amp)
+        Gs.append(G_curr)  # 保存本层训练好的生成模块
+        Zs.append(z_curr)  # 保存本层噪声图
+        NoiseAmp.append(opt.noise_amp)  # ？？
 
-        torch.save(Zs, '%s/Zs.pth' % (opt.out_))
-        torch.save(Gs, '%s/Gs.pth' % (opt.out_))
-        torch.save(reals, '%s/reals.pth' % (opt.out_))
-        torch.save(NoiseAmp, '%s/NoiseAmp.pth' % (opt.out_))
+        torch.save(Zs, '%s/Zs.pth' % (opt.out_))  # 保存噪声图
+        torch.save(Gs, '%s/Gs.pth' % (opt.out_))  # 保存生成器
+        torch.save(reals, '%s/reals.pth' % (opt.out_))  # 保存每层的原图像
+        torch.save(NoiseAmp, '%s/NoiseAmp.pth' % (opt.out_))  # 保存？？？
+        # 存储训练好的模型及数据
 
-        scale_num+=1
-        nfc_prev = opt.nfc
+        scale_num+=1  # 层数加一
+        nfc_prev = opt.nfc  # 保存nfc值
         del D_curr,G_curr
     return
 
 
 
 def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
-
-    real = reals[len(Gs)]
-    opt.nzx = real.shape[2]#+(opt.ker_size-1)*(opt.num_layer)
-    opt.nzy = real.shape[3]#+(opt.ker_size-1)*(opt.num_layer)
-    opt.receptive_field = opt.ker_size + ((opt.ker_size-1)*(opt.num_layer-1))*opt.stride
-    pad_noise = int(((opt.ker_size - 1) * opt.num_layer) / 2)
+    """对单层进行训练"""
+    real = reals[len(Gs)]  # 获取当前层对应的真实图片
+    opt.nzx = real.shape[2]  # +(opt.ker_size-1)*(opt.num_layer)  # 图像宽度
+    opt.nzy = real.shape[3]  # +(opt.ker_size-1)*(opt.num_layer)  # 图像高度
+    opt.receptive_field = opt.ker_size + ((opt.ker_size - 1) * (opt.num_layer - 1)) * opt.stride  # 感受野
+    pad_noise = int(((opt.ker_size - 1) * opt.num_layer) / 2)  # 计算padding
     pad_image = int(((opt.ker_size - 1) * opt.num_layer) / 2)
     if opt.mode == 'animation_train':
-        opt.nzx = real.shape[2]+(opt.ker_size-1)*(opt.num_layer)
-        opt.nzy = real.shape[3]+(opt.ker_size-1)*(opt.num_layer)
+        opt.nzx = real.shape[2] + (opt.ker_size - 1) * (opt.num_layer)
+        opt.nzy = real.shape[3] + (opt.ker_size - 1) * (opt.num_layer)
         pad_noise = 0
-    m_noise = nn.ZeroPad2d(int(pad_noise))
+    m_noise = nn.ZeroPad2d(int(pad_noise))  # padding工具
     m_image = nn.ZeroPad2d(int(pad_image))
 
     alpha = opt.alpha
 
     fixed_noise = functions.generate_noise([opt.nc_z,opt.nzx,opt.nzy],device=opt.device)
     z_opt = torch.full(fixed_noise.shape, 0, device=opt.device)
-    z_opt = m_noise(z_opt)
+    z_opt = m_noise(z_opt)  # 产生噪声图？？
 
     # setup optimizer
     optimizerD = optim.Adam(netD.parameters(), lr=opt.lr_d, betas=(opt.beta1, 0.999))
@@ -90,11 +92,11 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
     errG2plot = []
     D_real2plot = []
     D_fake2plot = []
-    z_opt2plot = []
+    z_opt2plot = []  # 初始化保存记录
 
     for epoch in range(opt.niter):
         if (Gs == []) & (opt.mode != 'SR_train'):
-            z_opt = functions.generate_noise([1,opt.nzx,opt.nzy], device=opt.device)
+            z_opt = functions.generate_noise([1,opt.nzx,opt.nzy], device=opt.device)  # 生成噪声图
             z_opt = m_noise(z_opt.expand(1,3,opt.nzx,opt.nzy))
             noise_ = functions.generate_noise([1,opt.nzx,opt.nzy], device=opt.device)
             noise_ = m_noise(noise_.expand(1,3,opt.nzx,opt.nzy))
@@ -113,15 +115,15 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
             #D_real_map = output.detach()
             errD_real = -output.mean()#-a
             errD_real.backward(retain_graph=True)
-            D_x = -errD_real.item()
+            D_x = -errD_real.item()  # 对真实图像进行判别
 
             # train with fake
             if (j==0) & (epoch == 0):
                 if (Gs == []) & (opt.mode != 'SR_train'):
                     prev = torch.full([1,opt.nc_z,opt.nzx,opt.nzy], 0, device=opt.device)
-                    in_s = prev
+                    in_s = prev  # 保存上层结果的上采样（第一层为全0）
                     prev = m_image(prev)
-                    z_prev = torch.full([1,opt.nc_z,opt.nzx,opt.nzy], 0, device=opt.device)
+                    z_prev = torch.full([1,opt.nc_z,opt.nzx,opt.nzy], 0, device=opt.device)  # 保存噪声图
                     z_prev = m_noise(z_prev)
                     opt.noise_amp = 1
                 elif opt.mode == 'SR_train':
@@ -152,19 +154,19 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
             else:
                 noise = opt.noise_amp*noise_+prev
 
-            fake = netG(noise.detach(),prev)
-            output = netD(fake.detach())
-            errD_fake = output.mean()
+            fake = netG(noise.detach(), prev)  # 生成器生成图像，输入为噪声图以及上一层的结果的上采样
+            output = netD(fake.detach())  # 判别器对生成图像进行判别
+            errD_fake = output.mean()  # 计算判别分数
             errD_fake.backward(retain_graph=True)
-            D_G_z = output.mean().item()
+            D_G_z = output.mean().item()  # 量化的判别结果
 
             gradient_penalty = functions.calc_gradient_penalty(netD, real, fake, opt.lambda_grad, opt.device)
             gradient_penalty.backward()
 
-            errD = errD_real + errD_fake + gradient_penalty
+            errD = errD_real + errD_fake + gradient_penalty  # 本层错误率的结果
             optimizerD.step()
 
-        errD2plot.append(errD.detach())
+        errD2plot.append(errD.detach())  # 记录结果
 
         ############################
         # (2) Update G network: maximize D(G(z))
@@ -174,7 +176,7 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
             netG.zero_grad()
             output = netD(fake)
             #D_fake_map = output.detach()
-            errG = -output.mean()
+            errG = -output.mean()  # 对生成图像进行判别
             errG.backward(retain_graph=True)
             if alpha!=0:
                 loss = nn.MSELoss()
@@ -184,7 +186,7 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
                 Z_opt = opt.noise_amp*z_opt+z_prev
                 rec_loss = alpha*loss(netG(Z_opt.detach(),z_prev),real)
                 rec_loss.backward(retain_graph=True)
-                rec_loss = rec_loss.detach()
+                rec_loss = rec_loss.detach()  # 计算rec_loss
             else:
                 Z_opt = z_opt
                 rec_loss = 0
@@ -194,7 +196,7 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
         errG2plot.append(errG.detach()+rec_loss)
         D_real2plot.append(D_x)
         D_fake2plot.append(D_G_z)
-        z_opt2plot.append(rec_loss)
+        z_opt2plot.append(rec_loss)  # 保存数据
 
         if epoch % 25 == 0 or epoch == (opt.niter-1):
             print('scale %d:[%d/%d]' % (len(Gs), epoch, opt.niter))
@@ -215,10 +217,11 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
         schedulerD.step()
         schedulerG.step()
 
-    functions.save_networks(netG,netD,z_opt,opt)
+    functions.save_networks(netG,netD,z_opt,opt)  # 保存网络
     return z_opt,in_s,netG    
 
 def draw_concat(Gs,Zs,reals,NoiseAmp,in_s,mode,m_noise,m_image,opt):
+    """对上层输入的上采样和本层噪声图进行加和"""
     G_z = in_s
     if len(Gs) > 0:
         if mode == 'rand':
@@ -229,7 +232,7 @@ def draw_concat(Gs,Zs,reals,NoiseAmp,in_s,mode,m_noise,m_image,opt):
             for G,Z_opt,real_curr,real_next,noise_amp in zip(Gs,Zs,reals,reals[1:],NoiseAmp):
                 if count == 0:
                     z = functions.generate_noise([1, Z_opt.shape[2] - 2 * pad_noise, Z_opt.shape[3] - 2 * pad_noise], device=opt.device)
-                    z = z.expand(1, 3, z.shape[2], z.shape[3])
+                    z = z.expand(1, 3, z.shape[2], z.shape[3])  # 生成噪声图
                 else:
                     z = functions.generate_noise([opt.nc_z,Z_opt.shape[2] - 2 * pad_noise, Z_opt.shape[3] - 2 * pad_noise], device=opt.device)
                 z = m_noise(z)
@@ -255,6 +258,7 @@ def draw_concat(Gs,Zs,reals,NoiseAmp,in_s,mode,m_noise,m_image,opt):
     return G_z
 
 def train_paint(opt,Gs,Zs,reals,NoiseAmp,centers,paint_inject_scale):
+    """对手绘图象生成模型进行训练"""
     in_s = torch.full(reals[0].shape, 0, device=opt.device)
     scale_num = 0
     nfc_prev = 0
@@ -304,19 +308,19 @@ def train_paint(opt,Gs,Zs,reals,NoiseAmp,centers,paint_inject_scale):
 
 
 def init_models(opt):
-
-    #generator initialization:
-    netG = models.GeneratorConcatSkip2CleanAdd(opt).to(opt.device)
-    netG.apply(models.weights_init)
+    """初始化生成器和判别器"""
+    # generator initialization:
+    netG = models.GeneratorConcatSkip2CleanAdd(opt).to(opt.device)  # 构建生成器模块
+    netG.apply(models.weights_init)  # 初始化网络权值
     if opt.netG != '':
-        netG.load_state_dict(torch.load(opt.netG))
+        netG.load_state_dict(torch.load(opt.netG))  # 初始化网络模型
     print(netG)
 
-    #discriminator initialization:
-    netD = models.WDiscriminator(opt).to(opt.device)
-    netD.apply(models.weights_init)
+    # discriminator initialization:
+    netD = models.WDiscriminator(opt).to(opt.device)  # 构建判别器模块
+    netD.apply(models.weights_init)  # 初始化网络权值
     if opt.netD != '':
-        netD.load_state_dict(torch.load(opt.netD))
+        netD.load_state_dict(torch.load(opt.netD))  # 初始化网络模型
     print(netD)
 
     return netD, netG
