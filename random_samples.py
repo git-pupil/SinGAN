@@ -4,6 +4,9 @@ from SinGAN.training import *
 from SinGAN.imresize import imresize
 import SinGAN.functions as functions
 
+# 该方案生成与训练图像相似的随机样本，模型接收参数：
+#     gen_start_scale: 模型从这一层开始生成样本并向上迭代，该层以下的层不参与生成过程
+#     scale_h，scale_v: 生成图像的水平/竖直缩放指数
 
 if __name__ == '__main__':
     """用训练好的模型生成随机图像"""
@@ -39,7 +42,8 @@ if __name__ == '__main__':
             real = functions.read_image(opt)  # 读取训练原图
             functions.adjust_scales2image(real, opt)  # 计算网络层数
             Gs, Zs, reals, NoiseAmp = functions.load_trained_pyramid(opt)  # 读取训练好的模型及参数
-            in_s = functions.generate_in2coarsest(reals,1,1,opt)  # 生成上一层输出（首层为全0）
+            # 生成模型开始生成随机图像层（即gen_start_scale）的输入，如果scale=1，则为全0的数组
+            in_s = functions.generate_in2coarsest(reals,1,1,opt)  
             SinGAN_generate(Gs, Zs, reals, NoiseAmp, opt, gen_start_scale=opt.gen_start_scale)  # 进行图像生成
 
         elif opt.mode == 'random_samples_arbitrary_sizes':

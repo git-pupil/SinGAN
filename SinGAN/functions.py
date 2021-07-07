@@ -257,6 +257,7 @@ def load_trained_pyramid(opt, mode_='train'):
     opt.mode = mode
     return Gs,Zs,reals,NoiseAmp
 
+# 获得最初随机生成层的输入图像，即上一个尺度的生成图像，用于随机生成样本
 def generate_in2coarsest(reals,scale_v,scale_h,opt):
     real = reals[opt.gen_start_scale]
     real_down = upsampling(real, scale_v * real.shape[2], scale_h * real.shape[3])
@@ -293,8 +294,8 @@ def generate_dir2save(opt):
             dir2save = '%s_quantized' % dir2save
     return dir2save
 
+# 合并用户输入参数和预定义参数为对象opt，方便后续调用
 def post_config(opt):
-    # init fixed parameters
     opt.device = torch.device("cpu" if opt.not_cuda else "cuda:0")
     opt.niter_init = opt.niter
     opt.noise_amp_init = opt.noise_amp
@@ -305,6 +306,8 @@ def post_config(opt):
     if opt.mode == 'SR':
         opt.alpha = 100
 
+    # 随机种子，定义随机种子后生成的随机数是一样的
+    # 这里的随机数在后续生成输入噪声时使用
     if opt.manualSeed is None:
         opt.manualSeed = random.randint(1, 10000)
     print("Random Seed: ", opt.manualSeed)
@@ -313,12 +316,6 @@ def post_config(opt):
     if torch.cuda.is_available() and opt.not_cuda:
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
     return opt
-
-def calc_init_scale(opt):
-    in_scale = math.pow(1/2,1/3)
-    iter_num = round(math.log(1 / opt.sr_factor, in_scale))
-    in_scale = pow(opt.sr_factor, 1 / iter_num)
-    return in_scale,iter_num
 
 # 使用kmeans聚类对图像中出现的颜色进行聚类，使用聚类图像对图像进行量化
 def quant(prev,device):
@@ -335,7 +332,7 @@ def quant(prev,device):
     # 返回量化图像和聚类中心
     return x,centers
 
-# 使用与真实图像相同的聚类中心对参考图像进行量化
+# 以真实图像的聚类中心为初始值对参考图像进行量化
 def quant2centers(paint, centers):
     arr = paint.reshape((-1, 3)).cpu()
     kmeans = KMeans(n_clusters=5, init=centers, n_init=1).fit(arr)
@@ -351,20 +348,27 @@ def quant2centers(paint, centers):
 
     return paint
 
-
+# 对掩模进行膨胀处理，膨胀后的掩模可以更好地处理融合/编辑区域的边界位置
 def dilate_mask(mask,opt):
+    # 设定膨胀直径
     if opt.mode == "harmonization":
         element = morphology.disk(radius=7)
     if opt.mode == "editing":
         element = morphology.disk(radius=20)
     mask = torch2uint8(mask)
     mask = mask[:,:,0]
+    
+    # 膨胀
     mask = morphology.binary_dilation(mask,selem=element)
+
+    # 使用高斯滤波器对边界位置进行平滑
     mask = filters.gaussian(mask, sigma=5)
     nc_im = opt.nc_im
     opt.nc_im = 1
     mask = np2torch(mask,opt)
     opt.nc_im = nc_im
+
+    # 将掩模扩展到三个通道
     mask = mask.expand(1, 3, mask.shape[2], mask.shape[3])
     plt.imsave('%s/%s_mask_dilated.png' % (opt.ref_dir, opt.ref_name[:-4]), convert_image_np(mask), vmin=0,vmax=1)
     mask = (mask-mask.min())/(mask.max()-mask.min())
