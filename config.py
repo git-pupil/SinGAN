@@ -12,15 +12,15 @@ def get_arguments():
     parser.add_argument('--netG', default='',     help="path to netG (to continue training)")
     parser.add_argument('--netD', default='',     help="path to netD (to continue training)")
     parser.add_argument('--manualSeed', type=int, help='manual seed')
-    parser.add_argument('--nc_z',type=int,        help='noise # channels',default=3)
-    parser.add_argument('--nc_im',type=int,       help='image # channels',default=3)
+    parser.add_argument('--nc_z',type=int,        help='noise # channels',default=3)  # 噪声图片的通道数
+    parser.add_argument('--nc_im',type=int,       help='image # channels',default=3)  # 训练图像的通道数
     parser.add_argument('--out',                  help='output folder',default='Output')
 
     #networks hyper parameters:
     parser.add_argument('--nfc', type=int, default=32)
     parser.add_argument('--min_nfc', type=int, default=32)
-    parser.add_argument('--ker_size',type=int,  help='kernel size',default=3)
-    parser.add_argument('--num_layer',type=int, help='number of layers',default=5)
+    parser.add_argument('--ker_size',type=int,  help='kernel size',default=3)  # 卷积核的尺寸
+    parser.add_argument('--num_layer',type=int, help='number of layers',default=5)  # 每个模块中全卷积层的层数
     parser.add_argument('--stride', type=int,   help='stride',default=1)
     parser.add_argument('--padd_size',type=int, help='net pad size',default=0)#math.floor(opt.ker_size/2)
 
