@@ -184,7 +184,6 @@ def kernel_shift(kernel, sf):
 
     # 计算质心
     current_center_of_mass = measurements.center_of_mass(kernel)
-    # 原因2
     wanted_center_of_mass = np.array(kernel.shape) / 2 + 0.5 * (sf - (kernel.shape[0] % 2))
     # 移位向量
     shift_vec = wanted_center_of_mass - current_center_of_mass
