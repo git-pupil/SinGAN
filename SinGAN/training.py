@@ -18,8 +18,8 @@ def train(opt,Gs,Zs,reals,NoiseAmp):
     nfc_prev = 0  # 上一次训练的nfc值
 
     while scale_num<opt.stop_scale+1:  # 逐层进行网络训练
-        opt.nfc = min(opt.nfc_init * pow(2, math.floor(scale_num / 4)), 128)  # ？？
-        opt.min_nfc = min(opt.min_nfc_init * pow(2, math.floor(scale_num / 4)), 128)  # ？？
+        opt.nfc = min(opt.nfc_init * pow(2, math.floor(scale_num / 4)), 128)  # 全卷积层中的输入通道数
+        opt.min_nfc = min(opt.min_nfc_init * pow(2, math.floor(scale_num / 4)), 128)  # 全卷积层中的最小输入通道数
 
         opt.out_ = functions.generate_dir2save(opt) # 获取生成模型的存储路径
         opt.outf = '%s/%d' % (opt.out_,scale_num)  # 获取生成模型的层数据的存储路径
@@ -33,7 +33,7 @@ def train(opt,Gs,Zs,reals,NoiseAmp):
         plt.imsave('%s/real_scale.png' %  (opt.outf), functions.convert_image_np(reals[scale_num]), vmin=0, vmax=1)
         #  把当前层的真实图片存起来
         D_curr,G_curr = init_models(opt)  # 初始化生成器和判别器模块
-        if (nfc_prev==opt.nfc):  # ？？？
+        if (nfc_prev==opt.nfc):  # 前一层全卷积输入通道数和配置中全卷积通道数相同，导入前一层尺度的模型参数
             G_curr.load_state_dict(torch.load('%s/%d/netG.pth' % (opt.out_,scale_num-1)))
             D_curr.load_state_dict(torch.load('%s/%d/netD.pth' % (opt.out_,scale_num-1)))
 
@@ -67,22 +67,22 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
     opt.nzx = real.shape[2]  # +(opt.ker_size-1)*(opt.num_layer)  # 图像宽度
     opt.nzy = real.shape[3]  # +(opt.ker_size-1)*(opt.num_layer)  # 图像高度
     opt.receptive_field = opt.ker_size + ((opt.ker_size - 1) * (opt.num_layer - 1)) * opt.stride  # 感受野
-    pad_noise = int(((opt.ker_size - 1) * opt.num_layer) / 2)  # 计算padding
-    pad_image = int(((opt.ker_size - 1) * opt.num_layer) / 2)
-    if opt.mode == 'animation_train':
+    pad_noise = int(((opt.ker_size - 1) * opt.num_layer) / 2)  # 计算噪声padding
+    pad_image = int(((opt.ker_size - 1) * opt.num_layer) / 2)  # 计算图像padding
+    if opt.mode == 'animation_train':  # 动画生成的训练设置
         opt.nzx = real.shape[2] + (opt.ker_size - 1) * (opt.num_layer)
         opt.nzy = real.shape[3] + (opt.ker_size - 1) * (opt.num_layer)
         pad_noise = 0
-    m_noise = nn.ZeroPad2d(int(pad_noise))  # padding工具
-    m_image = nn.ZeroPad2d(int(pad_image))
+    m_noise = nn.ZeroPad2d(int(pad_noise))  # 噪声padding函数
+    m_image = nn.ZeroPad2d(int(pad_image))  # 图像padding函数
 
     alpha = opt.alpha
 
-    fixed_noise = functions.generate_noise([opt.nc_z,opt.nzx,opt.nzy],device=opt.device)
-    z_opt = torch.full(fixed_noise.shape, 0, device=opt.device)
-    z_opt = m_noise(z_opt)  # 产生噪声图？？
+    fixed_noise = functions.generate_noise([opt.nc_z,opt.nzx,opt.nzy],device=opt.device) #生成固定噪声
+    z_opt = torch.full(fixed_noise.shape, 0, device=opt.device) #生成噪声shape相同的全零z_opt
+    z_opt = m_noise(z_opt)  # 对z_opt进行padding
 
-    # setup optimizer
+    # 优化器设置
     optimizerD = optim.Adam(netD.parameters(), lr=opt.lr_d, betas=(opt.beta1, 0.999))
     optimizerG = optim.Adam(netG.parameters(), lr=opt.lr_g, betas=(opt.beta1, 0.999))
     schedulerD = torch.optim.lr_scheduler.MultiStepLR(optimizer=optimizerD,milestones=[1600],gamma=opt.gamma)
@@ -99,10 +99,10 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
             z_opt = functions.generate_noise([1,opt.nzx,opt.nzy], device=opt.device)  # 生成噪声图
             z_opt = m_noise(z_opt.expand(1,3,opt.nzx,opt.nzy))
             noise_ = functions.generate_noise([1,opt.nzx,opt.nzy], device=opt.device)
-            noise_ = m_noise(noise_.expand(1,3,opt.nzx,opt.nzy))
+            noise_ = m_noise(noise_.expand(1,3,opt.nzx,opt.nzy)) #对噪声进行padding
         else:
-            noise_ = functions.generate_noise([opt.nc_z,opt.nzx,opt.nzy], device=opt.device)
-            noise_ = m_noise(noise_)
+            noise_ = functions.generate_noise([opt.nc_z,opt.nzx,opt.nzy], device=opt.device) #生成噪声图
+            noise_ = m_noise(noise_) #对噪声进行padding
 
         ############################
         # (1) Update D network: maximize D(x) + D(G(z))
@@ -110,10 +110,9 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
         for j in range(opt.Dsteps):
             # train with real
             netD.zero_grad()
-
-            output = netD(real).to(opt.device)
+            output = netD(real).to(opt.device) #计算真实图片的logit map
             #D_real_map = output.detach()
-            errD_real = -output.mean()#-a
+            errD_real = -output.mean() #计算真实图片的损失
             errD_real.backward(retain_graph=True)
             D_x = -errD_real.item()  # 对真实图像进行判别
 
