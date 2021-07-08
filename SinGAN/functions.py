@@ -110,15 +110,18 @@ def move_to_cpu(t):
     t = t.to(torch.device('cpu'))
     return t
 
+# 将参数范围限制在[-0.1,0.1]范围内，但不是通过直接压缩而是将其映射到满足高斯分布的空间
 def calc_gradient_penalty(netD, real_data, fake_data, LAMBDA, device):
+    # 生成一个随机数，作为假数据的权重
     alpha = torch.rand(1, 1)
     alpha = alpha.expand(real_data.size())
     alpha = alpha.to(device)#cuda() #gpu) #if use_cuda else alpha
 
+    # 在real和fake的连线上随机插值采样
     interpolates = alpha * real_data + ((1 - alpha) * fake_data)
+    interpolates = interpolates.to(device)
 
-
-    interpolates = interpolates.to(device)#.cuda()
+    # 将张量型的插值封装为Variable类型
     interpolates = torch.autograd.Variable(interpolates, requires_grad=True)
 
     disc_interpolates = netD(interpolates)
